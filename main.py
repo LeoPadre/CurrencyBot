@@ -20,7 +20,7 @@ if response.status_code == 200:
 
     # Пройти по элементам XML и извлечь нужные данные
     for valute in root.findall('Valute'):
-        name = valute.find('Name').text>
+        name = valute.find('Name').text
         vunit_rate = valute.find('VunitRate').text
         # Преобразовать строку в число с двумя знаками после запятой в меньшую сторону
         vunit_rate = round(float(vunit_rate.replace(',', '.')), 2)
