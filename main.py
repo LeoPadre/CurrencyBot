@@ -1,9 +1,10 @@
-import requests
 import xml.etree.ElementTree as ET
 from datetime import date
 import telebot
 from telebot import types
 from decouple import config
+import aiohttp
+import asyncio
 
 # Чтение токена из переменных окружения
 BOT_TOKEN = config('BOT_TOKEN')
@@ -12,25 +13,26 @@ BOT_TOKEN = config('BOT_TOKEN')
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Функция для получения курса валюты
-def get_currency_rate(currency_code):
+async def get_currency_rate(currency_code):
     current_date = date.today()
     current_date_str = current_date.strftime("%d/%m/%Y")
     url = f"https://www.cbr.ru/scripts/XML_daily.asp?date_req={current_date_str}"
-    response = requests.get(url)
 
-    if response.status_code == 200:
-        xml_content = response.content
-        root = ET.fromstring(xml_content)
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, ssl=False) as response:
+            if response.status == 200:
+                xml_content = await response.text()
+                root = ET.fromstring(xml_content)
 
-        for valute in root.findall('Valute'):
-            char_code = valute.find('CharCode').text
-            if char_code == currency_code:
-                name = valute.find('Name').text
-                vunit_rate = valute.find('VunitRate').text
-                vunit_rate = round(float(vunit_rate.replace(',', '.')), 2)
-                return f'🇷🇺 {vunit_rate} рублей за 1 {name}'
-    else:
-        return "Ошибка при загрузке данных"
+                for valute in root.findall('Valute'):
+                    char_code = valute.find('CharCode').text
+                    if char_code == currency_code:
+                        name = valute.find('Name').text
+                        vunit_rate = valute.find('VunitRate').text
+                        vunit_rate = round(float(vunit_rate.replace(',', '.')), 2)
+                        return f'🇷🇺 {vunit_rate} рублей за 1 {name}'
+            else:
+                return "Ошибка при загрузке данных"
 
 # Обработчик команды /start
 @bot.message_handler(commands=['start'])
@@ -55,8 +57,12 @@ def start(message):
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
     currency_code = call.data
-    currency_rate = get_currency_rate(currency_code)
-    bot.send_message(call.message.chat.id, currency_rate)
+
+    async def send_currency_rate():
+        currency_rate = await get_currency_rate(currency_code)
+        bot.send_message(call.message.chat.id, currency_rate)
+
+    asyncio.run(send_currency_rate())
 
 # Запуск бота
 if __name__ == "__main__":
