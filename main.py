@@ -5,12 +5,41 @@ from telebot import types
 from decouple import config
 import aiohttp
 import asyncio
+import logging
+
+# Настройка логгирования
+logging.basicConfig(filename='HandyCurrencyBot.log', level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Чтение токена из переменных окружения
 BOT_TOKEN = config('BOT_TOKEN')
 
 # Инициализация бота
 bot = telebot.TeleBot(BOT_TOKEN)
+
+# Словарь для хранения полных названий валют
+currency_names = {
+    "USD": "Доллар США",
+    "EUR": "Евро",
+    "GBP": "Фунт стерлингов",
+    "AUD": "Австралийский доллар",
+    "AZN": "Азербайджанский манат",
+    "AMD": "Армянский драм",
+    "BYN": "Белорусский рубль",
+    "GEL": "Грузинский лари",
+    "AED": "Дирхам ОАЭ",
+    "INR": "Индийская рупия",
+    "KZT": "Казахстанский тенге",
+    "CNY": "Китайский юань",
+    "TJS": "Таджикский сомони",
+    "TRY": "Турецкая лира",
+    "UZS": "Узбекский сум",
+    "UAH": "Украинская гривна",
+    "JPY": "Японская иена",
+    "KRW": "Вон Республики Корея",
+    "CHF": "Швейцарский франк",
+    "SEK": "Шведская крона"
+}
 
 # Функция для получения курса валюты
 async def get_currency_rate(currency_code):
@@ -30,13 +59,19 @@ async def get_currency_rate(currency_code):
                         name = valute.find('Name').text
                         vunit_rate = valute.find('VunitRate').text
                         vunit_rate = round(float(vunit_rate.replace(',', '.')), 2)
-                        return f'🇷🇺 {vunit_rate} рублей за 1 {name}'
+                        return f'<b>🇷🇺 {vunit_rate} рублей за 1 {currency_names[currency_code]}</b>'
             else:
                 return "Ошибка при загрузке данных"
 
-# Обработчик команды /start
-@bot.message_handler(commands=['start'])
-def start(message):
+# Функция для отправки кнопки "Выбрать валюту"
+def send_choose_currency_button(chat_id):
+    markup = types.InlineKeyboardMarkup()
+    button = types.InlineKeyboardButton("Выбрать валюту", callback_data="choose_currency")
+    markup.add(button)
+    bot.send_message(chat_id, "Для получения курса выберите валюту или нажмите кнопку 'Выбрать валюту':", reply_markup=markup, parse_mode='HTML')
+
+# Функция для отправки клавиатуры с выбором валюты
+def send_currency_selection_keyboard(chat_id):
     markup = types.InlineKeyboardMarkup()
     currencies = [
         ("USD", "🇺🇸"), ("EUR", "🇪🇺"), ("GBP", "🇬🇧"), ("AUD", "🇦🇺"), ("AZN", "🇦🇿"),
@@ -51,18 +86,41 @@ def start(message):
         buttons = [types.InlineKeyboardButton(f"{flag} {currency}", callback_data=currency) for currency, flag in row]
         markup.row(*buttons)
 
-    bot.send_message(message.chat.id, "Привет! Я бот, который предоставляет курсы валют. Выберите валюту:", reply_markup=markup)
+    bot.send_message(chat_id, "Выберите валюту:", reply_markup=markup)
 
-# Обработчик выбора валюты
+# Обработчик команды /start
+@bot.message_handler(commands=['start'])
+def start(message):
+    username = message.from_user.username  # Получаем имя пользователя
+    log_activity(message, username)  # Логгирование активности с именем пользователя
+    send_choose_currency_button(message.chat.id)  # Отправляем кнопку "Выбрать валюту"
+
+# Обработчик выбора валюты или кнопки "Выбрать валюту"
 @bot.callback_query_handler(func=lambda call: True)
 def callback_query(call):
-    currency_code = call.data
+    if call.data == "choose_currency":
+        username = call.from_user.username  # Получаем имя пользователя
+        log_activity(call.message, username)  # Логгирование активности с именем пользователя
+        send_currency_selection_keyboard(call.message.chat.id)  # Отправляем клавиатуру с выбором валюты
+    else:
+        currency_code = call.data
+        username = call.from_user.username
+        user_message = f"Выбрана валюта: {currency_names[currency_code]} ({currency_code})"
 
-    async def send_currency_rate():
-        currency_rate = await get_currency_rate(currency_code)
-        bot.send_message(call.message.chat.id, currency_rate)
+        async def send_currency_rate():
+            currency_rate = await get_currency_rate(currency_code)
+            bot.send_message(call.message.chat.id, currency_rate, parse_mode='HTML')  # Выделяем текст жирным
+            send_choose_currency_button(call.message.chat.id)  # После вывода курса, предлагаем выбрать другую валюту
+            log_activity(call.message, username, user_message)  # Логгирование активности с выбранной валютой
 
-    asyncio.run(send_currency_rate())
+        asyncio.run(send_currency_rate())
+
+# Функция для логгирования активности
+def log_activity(message, username=None, user_message=None):
+    username = username or message.from_user.username
+    activity = f"User {username} sent message: '{user_message or message.text}'"
+
+    logging.info(activity)
 
 # Запуск бота
 if __name__ == "__main__":
