@@ -14,4 +14,3 @@
 2023-10-06 00:34:49,446 - INFO - User "tg username" sent message: 'Выбрана валюта: Японская иена (JPY)'
 
 ![image](https://github.com/LeoPadre/HandyCurrencyBot/assets/88144121/b44cced8-b2b3-44ea-96be-f6e771932a01)
-
